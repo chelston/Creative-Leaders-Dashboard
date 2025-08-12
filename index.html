@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Creative Bootcamp – Ads Dashboard</title>
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#0f172a; --card:#0b1220; --ink:#e5e7eb; --muted:#94a3b8; --line:#1f2937;
+      --accent:#982785; --primary:#2a327c; --success:#10b981; --info:#17719a; --warn:#f59e0b; --red:#ef4444;
+      --chip:#0b1220; --chip-border:#263044;
+    }
+    @media(prefers-color-scheme:light){
+      :root{ --bg:#f8fafc; --panel:#ffffff; --card:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --chip:#fff; --chip-border:#e2e8f0 }
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;color:var(--ink);background:linear-gradient(180deg, var(--panel), var(--bg) 200px)}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    .header{position:sticky;top:0;z-index:10;backdrop-filter:blur(8px);background:rgba(17,24,39,.8);border-bottom:1px solid var(--line)}
+    .header-inner{display:flex;gap:12px;align-items:center;padding:10px 16px}
+    .logo{width:28px;height:28px;border-radius:8px;background:var(--accent)}
+    .title{font-weight:700}
+    .sub{font-size:12px;color:var(--muted)}
+    .btn{appearance:none;border:1px solid var(--line);background:transparent;border-radius:10px;padding:8px 12px;cursor:pointer;color:var(--ink)}
+    .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .btn.ghost{background:transparent}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .grid{display:grid;gap:16px}
+    .grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .auto-cols{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:16px}
+    .kpi{padding:16px}
+    .kpi .label{font-size:12px;color:var(--muted)}
+    .kpi .value{font-size:28px;font-weight:700}
+    .kpi .sub{font-size:12px;color:var(--muted)}
+    .section-title{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+    .section-title .t{font-size:16px;font-weight:700}
+    .section-title .s{font-size:12px;color:var(--muted)}
+    .row{display:flex;gap:12px}
+    .col{display:flex;flex-direction:column}
+    .grow{flex:1}
+    .input, .textarea, .select{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--chip);color:var(--ink)}
+    .textarea{min-height:80px}
+    .hint{font-size:12px;color:var(--muted)}
+    .progress{width:100%;height:12px;background:var(--line);border-radius:8px;overflow:hidden}
+    .bar{height:100%;background:var(--success)}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    td, th{border-bottom:1px solid var(--line);padding:8px;text-align:left}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;color:var(--ink);border:1px solid var(--chip-border)}
+    .chip .dot{width:8px;height:8px;border-radius:999px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:8px;font-size:12px;color:#fff}
+    .pill.primary{background:var(--primary)}
+    .pill.accent{background:var(--accent)}
+    .pill.info{background:var(--info)}
+    .error{color:var(--red);font-size:12px}
+    .footer{position:sticky;bottom:0;background:rgba(17,24,39,.85);border-top:1px solid var(--line);backdrop-filter:blur(6px)}
+    .footer-inner{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:10px 16px}
+    .spark{width:100%;height:64px}
+  </style>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="header">
+    <div class="wrap header-inner">
+      <div class="logo"></div>
+      <div>
+        <div class="title">Creative Leadership & Management Skills Bootcamp</div>
+        <div class="sub">Instagram • Facebook • LinkedIn · <span id="hdrWeeks">3</span> weeks · Lancashire</div>
+      </div>
+      <div style="margin-left:auto" class="row">
+        <button class="btn ghost" onclick="window.print()">Print</button>
+        <button class="btn" id="downloadPlan">Download Plan (JSON)</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="wrap" id="root"></main>
+
+  <div class="footer">
+    <div class="wrap footer-inner">
+      <div id="footerSummary" class="sub">Totals preview…</div>
+      <div class="row">
+        <button class="btn" id="exportCsv">Export KPIs (CSV)</button>
+        <button class="btn primary" id="mailtoBtn">Send Change Request</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect } = React;
+
+    const fmt = {
+      number: (n, d=0) => n.toLocaleString(undefined, { maximumFractionDigits: d }),
+      money: (n, d=0) => `£${n.toLocaleString(undefined, { maximumFractionDigits: d })}`,
+      pct: (n) => `${(n*100).toFixed(0)}%`
+    };
+    const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
+
+    const Presets = [
+      { key:'conservative', label:'Conservative', igCpc:1.6, fbCpc:2.2, liCpc:4.5, conv:0.09, close:0.45 },
+      { key:'balanced', label:'Balanced', igCpc:1.2, fbCpc:1.8, liCpc:3.5, conv:0.12, close:0.50 },
+      { key:'aggressive', label:'Aggressive', igCpc:0.9, fbCpc:1.4, liCpc:3.0, conv:0.16, close:0.55 },
+    ];
+
+    function KPI({label, value, sub}){
+      return (
+        <div className="card kpi" role="status" aria-live="polite">
+          <div className="label">{label}</div>
+          <div className="value">{value}</div>
+          {sub ? <div className="sub">{sub}</div> : null}
+        </div>
+      );
+    }
+
+    function SectionTitle({ title, subtitle, right }){
+      return (
+        <div className="section-title">
+          <div>
+            <div className="t">{title}</div>
+            {subtitle ? <div className="s">{subtitle}</div> : null}
+          </div>
+          {right}
+        </div>
+      );
+    }
+
+    function Sparkline({points, colour='var(--success)'}){
+      const w = 220, h = 64; const max = Math.max(...points, 1);
+      const d = points.map((p,i)=>`${(i/(points.length-1))*w},${h-(p/max)*h}`).join(' ');
+      return (
+        <svg className="spark" viewBox={`0 0 ${w} ${h}`}>
+          <polyline fill="none" stroke={colour} strokeWidth="2" points={d} />
+        </svg>
+      );
+    }
+
+    function App(){
+      // Budgets
+      const [igPerWeek, setIgPerWeek] = useState(50);
+      const [fbPerWeek, setFbPerWeek] = useState(50);
+      const [liPerWeek, setLiPerWeek] = useState(50);
+      const [weeks, setWeeks] = useState(3);
+
+      // Assumptions
+      const [igCpc, setIgCpc] = useState(1.2);
+      const [fbCpc, setFbCpc] = useState(1.8);
+      const [liCpc, setLiCpc] = useState(3.5);
+      const [convRate, setConvRate] = useState(0.12);
+      const [leadCloseRate, setLeadCloseRate] = useState(0.5);
+
+      // Messaging
+      const [toEmail, setToEmail] = useState('Chelston.Phillip@communitycvs.org.uk');
+      const [yourName, setYourName] = useState('');
+      const [yourEmail, setYourEmail] = useState('');
+      const [notes, setNotes] = useState('');
+
+      // Tracker
+      const [fileName, setFileName] = useState('');
+      const [rows, setRows] = useState([]);
+      const [sheetNames, setSheetNames] = useState([]);
+      const [sheetIdx, setSheetIdx] = useState(0);
+      const [target, setTarget] = useState(10);
+      const [emailCol, setEmailCol] = useState('');
+      const [error, setError] = useState('');
+
+      useEffect(()=>{ const el = document.getElementById('hdrWeeks'); if (el) el.textContent = weeks; }, [weeks]);
+
+      function forecast(weekly, cpc){
+        const weeklySafe = Math.max(0, weekly);
+        const spend = weeklySafe * weeks;
+        const clicks = spend / Math.max(cpc, 0.1);
+        const leads = clicks * clamp(convRate, 0, 1);
+        const confirmed = leads * clamp(leadCloseRate, 0, 1);
+        return { spend, clicks, leads, confirmed };
+      }
+
+      const ig = useMemo(()=>forecast(igPerWeek, igCpc), [igPerWeek, igCpc, weeks, convRate, leadCloseRate]);
+      const fb = useMemo(()=>forecast(fbPerWeek, fbCpc), [fbPerWeek, fbCpc, weeks, convRate, leadCloseRate]);
+      const li = useMemo(()=>forecast(liPerWeek, liCpc), [liPerWeek, liCpc, weeks, convRate, leadCloseRate]);
+      const totals = useMemo(()=>({
+        spend: ig.spend + fb.spend + li.spend,
+        clicks: ig.clicks + fb.clicks + li.clicks,
+        leads: ig.leads + fb.leads + li.leads,
+        confirmed: ig.confirmed + fb.confirmed + li.confirmed,
+      }), [ig, fb, li]);
+
+      // Footer summary + actions
+      useEffect(()=>{
+        const el = document.getElementById('footerSummary');
+        if (el) el.textContent = `Total £${fmt.number(totals.spend)} · ${fmt.number(totals.clicks)} clicks · ${fmt.number(totals.leads)} leads · ${fmt.number(totals.confirmed)} confirmed`;
+        const mailBtn = document.getElementById('mailtoBtn');
+        if (mailBtn) mailBtn.onclick = ()=>{
+          if (!toEmail) return;
+          const subject = 'Creative Bootcamp – Ads Plan Update';
+          const body = [
+            `From: ${yourName} <${yourEmail}>`,
+            `Notes: ${notes}`,
+            `Weeks: ${weeks}`,
+            `Budget/wk IG £${igPerWeek}, FB £${fbPerWeek}, LI £${liPerWeek}`,
+            `CPC IG £${igCpc}, FB £${fbCpc}, LI £${liCpc}`,
+            `Conv ${fmt.pct(convRate)}, Close ${fmt.pct(leadCloseRate)}`,
+            `Totals: Spend ${fmt.money(totals.spend)}, Clicks ${fmt.number(totals.clicks)}, Leads ${fmt.number(totals.leads)}, Confirmed ${fmt.number(totals.confirmed)}`
+          ].join('\n');
+          window.location.href = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        };
+        const dlBtn = document.getElementById('downloadPlan');
+        if (dlBtn) dlBtn.onclick = ()=>{
+          const payload = { weeks, budgets:{ instagram:igPerWeek, facebook:fbPerWeek, linkedin:liPerWeek }, cpc:{ instagram:igCpc, facebook:fbCpc, linkedin:liCpc }, convRate, leadCloseRate, totals };
+          const blob = new Blob([JSON.stringify(payload,null,2)], { type:'application/json' });
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bootcamp-plan.json'; a.click();
+        };
+        const csvBtn = document.getElementById('exportCsv');
+        if (csvBtn) csvBtn.onclick = ()=>{
+          const rows = [['Metric','Value'], ['Total Spend', fmt.money(totals.spend)], ['Total Clicks', fmt.number(totals.clicks)], ['Total Leads', fmt.number(totals.leads)], ['Confirmed', fmt.number(totals.confirmed)]];
+          const csv = rows.map(r=>r.join(',')).join('\n');
+          const blob = new Blob([csv], { type:'text/csv' });
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kpis.csv'; a.click();
+        };
+      }, [weeks, igPerWeek, fbPerWeek, liPerWeek, igCpc, fbCpc, liCpc, convRate, leadCloseRate, totals, toEmail, yourName, yourEmail, notes]);
+
+      function applyPreset(p){ setIgCpc(p.igCpc); setFbCpc(p.fbCpc); setLiCpc(p.liCpc); setConvRate(p.conv); setLeadCloseRate(p.close); }
+
+      // Tracker helpers
+      function normalise(r){ return r.map(row => row.map(c => String(c ?? '').trim())); }
+      function countLearners(data){
+        if(!data || !data.length) return 0;
+        const header = data[0].map(h => String(h));
+        let idx = -1;
+        if (emailCol){ idx = header.findIndex(h => h.toLowerCase() === emailCol.toLowerCase()); }
+        if (idx < 0) idx = header.findIndex(h => h.toLowerCase().includes('email'));
+        if (idx >= 0) return data.slice(1).filter(r => /@/.test(String(r[idx]||''))).length;
+        return data.slice(1).filter(r => r.some(c => String(c).trim() !== '')).length;
+      }
+
+      async function handleFile(e){
+        setError('');
+        const file = e.target.files?.[0];
+        if(!file) return;
+        setFileName(file.name);
+        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+        try{
+          if(isExcel){
+            const buf = await file.arrayBuffer();
+            const wb = XLSX.read(buf, { type: 'array' });
+            setSheetNames(wb.SheetNames);
+            const ws = wb.Sheets[wb.SheetNames[sheetIdx] || wb.SheetNames[0]];
+            const data = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+            setRows(normalise(Array.isArray(data) ? data : []));
+          } else {
+            const text = await file.text();
+            const csv = text.split(/\r?\n/).map(line => line.split(','));
+            setRows(normalise(csv)); setSheetNames(['CSV']); setSheetIdx(0);
+          }
+        } catch(err){
+          console.error(err); setRows([]); setError('Could not read file. Please check the format.');
+        }
+      }
+
+      function onSheetChange(e){ setSheetIdx(Number(e.target.value)); }
+      useEffect(()=>{ document.getElementById('hdrWeeks')?.scrollTop; }, [sheetIdx]);
+
+      const learnerCount = countLearners(rows);
+      const learnerPct = clamp((learnerCount / Math.max(target, 1)) * 100, 0, 100);
+
+      return (
+        <div>
+          <div className="grid grid-4">
+            <KPI label="Total Budget" value={fmt.money(totals.spend)} sub={`${weeks} weeks`} />
+            <KPI label="Weekly Budget" value={fmt.money(igPerWeek + fbPerWeek + liPerWeek)} sub="£50 per platform/week" />
+            <KPI label="Projected Leads" value={fmt.number(totals.leads)} sub={`Conv ${fmt.pct(convRate)}`} />
+            <KPI label="Confirmed Places" value={fmt.number(totals.confirmed)} sub={`Close ${fmt.pct(leadCloseRate)}`} />
+          </div>
+
+          <div className="grid auto-cols" style={{marginTop:16}}>
+            <div className="card">
+              <SectionTitle title="Budget by Platform" subtitle="Adjust weekly budget and CPC assumptions." right={
+                <div className="row">
+                  {Presets.map(p => (
+                    <button key={p.key} className="btn" onClick={()=>applyPreset(p)} aria-label={`Apply ${p.label} preset`}>{p.label}</button>
+                  ))}
+                </div>
+              } />
+
+              <div className="grid grid-3">
+                {[{
+                  name:'Instagram', state:[igPerWeek, setIgPerWeek], cpc:[igCpc, setIgCpc], data:ig, colour:'var(--accent)'
+                },{
+                  name:'Facebook', state:[fbPerWeek, setFbPerWeek], cpc:[fbCpc, setFbCpc], data:fb, colour:'var(--primary)'
+                },{
+                  name:'LinkedIn', state:[liPerWeek, setLiPerWeek], cpc:[liCpc, setLiCpc], data:li, colour:'var(--info)'
+                }].map((p)=>(
+                  <div key={p.name} className="card" style={{background:'var(--panel)'}}>
+                    <div className="row" style={{justifyContent:'space-between', alignItems:'center'}}>
+                      <div className="chip"><span className="dot" style={{background:p.colour}}></span>{p.name}</div>
+                      <div className="hint">{fmt.money(p.data.spend)} · {fmt.number(p.data.clicks)} clicks</div>
+                    </div>
+                    <Sparkline colour={p.colour} points={[p.data.clicks*0.2,p.data.clicks*0.4,p.data.clicks*0.6,p.data.clicks*0.8,p.data.clicks]} />
+                    <div className="grid" style={{gridTemplateColumns:'1fr 1fr', gap:12}}>
+                      <div className="col">
+                        <label className="hint">£ per week</label>
+                        <input className="input" type="number" min="0" value={p.state[0]} onChange={e=>p.state[1](Number(e.target.value||0))} />
+                      </div>
+                      <div className="col">
+                        <label className="hint">Assumed CPC (£)</label>
+                        <input className="input" type="number" min="0.1" step="0.1" value={p.cpc[0]} onChange={e=>p.cpc[1](Number(e.target.value||0))} />
+                      </div>
+                    </div>
+                    <div className="hint" style={{marginTop:8}}>{fmt.number(p.data.leads)} leads · {fmt.number(p.data.confirmed)} confirmed</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="row" style={{ marginTop:12 }}>
+                <div className="grow">
+                  <label className="hint">Weeks</label>
+                  <input className="input" type="number" min="1" max="12" value={weeks} onChange={e=>setWeeks(Number(e.target.value||1))} />
+                </div>
+                <div className="grow">
+                  <label className="hint">Lead conversion rate</label>
+                  <input className="input" type="number" min="0" max="1" step="0.01" value={convRate} onChange={e=>setConvRate(Number(e.target.value||0))} />
+                </div>
+                <div className="grow">
+                  <label className="hint">Lead-to-place rate</label>
+                  <input className="input" type="number" min="0" max="1" step="0.01" value={leadCloseRate} onChange={e=>setLeadCloseRate(Number(e.target.value||0))} />
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <SectionTitle title="Learner Tracker" subtitle="Upload Excel/CSV • choose sheet & email column" right={<div className="hint">{learnerCount} / {target}</div>} />
+              <div className="row" style={{alignItems:'center'}}>
+                <input className="input" type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleFile} aria-label="Upload spreadsheet" />
+                {sheetNames.length>0 && (
+                  <select className="select" value={sheetIdx} onChange={onSheetChange} aria-label="Sheet picker">
+                    {sheetNames.map((n,i)=>(<option key={n} value={i}>{n}</option>))}
+                  </select>
+                )}
+              </div>
+              {rows.length>0 && (
+                <div className="row" style={{marginTop:8}}>
+                  <div className="col" style={{maxWidth:260}}>
+                    <label className="hint">Email column (optional)</label>
+                    <input className="input" list="emailHeaders" value={emailCol} onChange={e=>setEmailCol(e.target.value)} placeholder="Auto-detect" />
+                    <datalist id="emailHeaders">
+                      {rows[0].slice(0,20).map((h,i)=>(<option key={i} value={h} />))}
+                    </datalist>
+                    <label className="hint" style={{marginTop:8}}>Target places</label>
+                    <input className="input" type="number" min="1" value={target} onChange={e=>setTarget(Number(e.target.value||1))} />
+                    <div className="progress" style={{marginTop:8}}><div className="bar" style={{ width: `${learnerPct}%` }}></div></div>
+                    <div className="hint" style={{marginTop:6}}>{learnerPct.toFixed(0)}% of target reached</div>
+                  </div>
+                  <div className="grow" style={{overflow:'auto', maxHeight:200, border:'1px solid var(--line)', borderRadius:10}}>
+                    <table>
+                      <thead>
+                        <tr>
+                          {rows[0].slice(0,8).map((h,i)=>(<th key={i}>{h}</th>))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.slice(1,26).map((r,i)=>(
+                          <tr key={i}>{r.slice(0,8).map((c,j)=>(<td key={j}>{c}</td>))}</tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {error && <div className="error" style={{marginTop:8}}>{error}</div>}
+              {rows.length===0 && !error && <div className="hint" style={{marginTop:8}}>No file uploaded yet.</div>}
+            </div>
+
+            <div className="card">
+              <SectionTitle title="Submit Change Request" subtitle="We’ll prefill an email with the plan summary." />
+              <div className="grid" style={{ gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                <div className="col">
+                  <label className="hint">To</label>
+                  <input className="input" value={toEmail} onChange={e=>setToEmail(e.target.value)} />
+                </div>
+                <div className="col">
+                  <label className="hint">Your name</label>
+                  <input className="input" value={yourName} onChange={e=>setYourName(e.target.value)} />
+                </div>
+                <div className="col">
+                  <label className="hint">Your email</label>
+                  <input className="input" type="email" value={yourEmail} onChange={e=>setYourEmail(e.target.value)} />
+                </div>
+                <div className="col">
+                  <label className="hint">Notes</label>
+                  <input className="input" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Anything else?" />
+                </div>
+              </div>
+              <div className="hint" style={{marginTop:8}}>You can also use the sticky footer to send/export quickly.</div>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop:16 }}>
+            <SectionTitle title="Customer-Facing Messages" subtitle="Editable copy to paste into ads." right={<span className="pill primary">Savvy, concise, UK English</span>} />
+            <div className="grid" style={{ gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:12 }}>
+              <CopyCard label="Instagram (Carousel)" cta="Apply Now" colour="var(--accent)" textDefault="Level up your creative leadership. Fully funded 10-session programme for arts, culture & digital professionals in Lancashire. Starts 9 September." />
+              <CopyCard label="Facebook (Short Video)" cta="Apply Now" colour="var(--primary)" textDefault="Are you leading in the creative sector? Strengthen strategy, communication and team leadership. Fully funded • Limited places." />
+              <CopyCard label="LinkedIn (Retargeting)" cta="Secure Your Place" colour="var(--info)" textDefault="Final places for Creative Leadership & Management Skills Bootcamp (Blackburn). Fully funded. Starts 9 September." />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function CopyCard({ label, cta, colour, textDefault }){
+      const [text, setText] = React.useState(textDefault);
+      const chars = text.length; const max = 180; const over = Math.max(0, chars - max);
+      return (
+        <div className="card">
+          <div className="row" style={{justifyContent:'space-between', alignItems:'center'}}>
+            <div className="chip"><span className="dot" style={{background:colour}}></span>{label}</div>
+            <span className="hint">{chars}/{max} {over>0 && <span className="error">(Trim {over})</span>}</span>
+          </div>
+          <textarea className="textarea" value={text} onChange={e=>setText(e.target.value)} aria-label={`${label} text`} />
+          <div style={{marginTop:8}}><span className="pill" style={{background:colour}}>{cta}</span></div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App/>);
+  </script>
+</body>
+</html>
